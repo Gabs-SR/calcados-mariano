@@ -1,6 +1,9 @@
 const express = require('express');
 const app = express();
 
+// Puxando a conexão com o banco de dados para ele ser inicializado
+require('./src/config/db');
+
 // Permite que o servidor entenda dados enviados no formato JSON
 app.use(express.json());
 
