@@ -1,5 +1,16 @@
 const express = require('express');
+
+//Importa a biblioteca CORS
+const cors = require('cors');
+
 const app = express();
+
+// O 'app.use' aplica o CORS no seu servidor, ele libera a entrada do front-end para o back-end,
+//permitindo que eles se comuniquem sem problemas de bloqueio de origem cruzada (CORS).
+app.use(cors());
+
+// Puxando a conexão com o banco de dados para ele ser inicializado
+require('./src/config/db');
 
 // Permite que o servidor entenda dados enviados no formato JSON
 app.use(express.json());
@@ -13,4 +24,3 @@ app.get('/', (req, res) => {
 const PORT = 3000;
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
-});
