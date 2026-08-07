@@ -1,158 +1,208 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './App.css';
 
 function App() {
-  // Estados da aplicação
+  const [todosProdutos, setTodosProdutos] = useState([]);
+  const [produtosFiltrados, setProdutosFiltrados] = useState([]);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState('Todos');
   const [produtoSelecionado, setProdutoSelecionado] = useState(null);
+  const [termoBusca, setTermoBusca] = useState('');
+  const [ordenacao, setOrdenacao] = useState('padrao');
+  const [darkMode, setDarkMode] = useState(false);
 
-  // Lista de produtos mockados (com fotos reais e dados completos)
-  const produtosMock = [
-    {
-      id: 1,
-      nome: "Tênis Esportivo Runner Pro",
-      marca: "Nike",
-      categoria: "Esporte",
-      preco: 299.90,
-      tamanhos: "38 ao 42",
-      descricao: "Desenvolvido para máxima performance e conforto no dia a dia. Solado emborrachado de alta durabilidade e tecido respirável.",
-      imagem_url: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80"
-    },
-    {
-      id: 2,
-      nome: "Sapato Social Couro Comfort",
-      marca: "Pegada",
-      categoria: "Masculino",
-      preco: 189.90,
-      tamanhos: "39 ao 44",
-      descricao: "Confeccionado em couro legítimo. Design clássico e elegante, ideal para reuniões, eventos formais e trabalho.",
-      imagem_url: "https://images.unsplash.com/photo-1614252235316-8c857d38b5f4?auto=format&fit=crop&w=600&q=80"
-    },
-    {
-      id: 3,
-      nome: "Bota Adventure Trilha",
-      marca: "Macboot",
-      categoria: "Esporte",
-      preco: 349.50,
-      tamanhos: "37 ao 43",
-      descricao: "Resistente à água e ideal para trilhas ou uso urbano robusto. Solado tratorado antiderrapante para total segurança.",
-      imagem_url: "https://images.unsplash.com/photo-1608256246200-53e635b5b65f?auto=format&fit=crop&w=600&q=80"
-    },
-    {
-      id: 4,
-      nome: "Tênis Casual Urban Street",
-      marca: "Adidas",
-      categoria: "Feminino",
-      preco: 219.90,
-      tamanhos: "37 ao 41",
-      descricao: "Estilo urbano autêntico que combina perfeitamente com jeans, vestidos ou bermudas. Conforto prolongado para passeios.",
-      imagem_url: "https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=600&q=80"
-    },
-    {
-      id: 5,
-      nome: "Sandália Anatômica Comfort",
-      marca: "Anabela",
-      categoria: "Feminino",
-      preco: 129.90,
-      tamanhos: "34 ao 39",
-      descricao: "Palmilha anatômica ultra macia que reduz o impacto ao caminhar. Praticidade e frescor para os dias mais quentes.",
-      imagem_url: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&w=600&q=80"
-    },
-    {
-      id: 6,
-      nome: "Chuteira Campo Society Master",
-      marca: "Umbro",
-      categoria: "Esporte",
-      preco: 259.90,
-      tamanhos: "38 ao 43",
-      descricao: "Trava fixa para excelente aderência no gramado sintético. Toque de bola preciso e cabedal reforçado.",
-      imagem_url: "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&fit=crop&w=600&q=80"
-    },
-    {
-      id: 7,
-      nome: "Mocassim Casual em Couro",
-      marca: "Ferracini",
-      categoria: "Masculino",
-      preco: 239.90,
-      tamanhos: "38 ao 43",
-      descricao: "Praticidade e elegância sem cadarço. Produzido em couro macio com costuras reforçadas à mão.",
-      imagem_url: "https://images.unsplash.com/photo-1560769629-975ec94e6a86?auto=format&fit=crop&w=600&q=80"
-    },
-    {
-      id: 8,
-      nome: "Tênis Infantil Luzes Divertido",
-      marca: "Klin",
-      categoria: "Feminino",
-      preco: 149.90,
-      tamanhos: "26 ao 33",
-      descricao: "Luzes de led que piscam a cada passo. Calce fácil com fecho de contato, garantindo independência e diversão para os pequenos.",
-      imagem_url: "https://images.unsplash.com/photo-1515955656352-a1fa3ffcd111?auto=format&fit=crop&w=600&q=80"
+  const numeroWhatsApp = "553798414547";
+  const API_URL = "";
+
+  // Efeito para alternar a classe dark-mode no body
+  useEffect(() => {
+    if (darkMode) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
     }
-  ];
+  }, [darkMode]);
 
-  const numeroWhatsApp = "5537998275086";
+  // Carrega todos os produtos do banco assim que a página abre
+  useEffect(() => {
+    carregarProdutos();
+  }, []);
 
-  // Filtra os produtos dependendo da categoria escolhida no topo
-  const produtosFiltrados = categoriaSelecionada === 'Todos' 
-    ? produtosMock 
-    : produtosMock.filter(p => p.categoria === categoriaSelecionada);
+  // Filtro inteligente, busca e ordenação
+  useEffect(() => {
+    let resultado = [...todosProdutos];
+
+    // Filtro por Categoria Inteligente
+    if (categoriaSelecionada !== 'Todos') {
+      const catBusca = categoriaSelecionada.toLowerCase();
+      
+      resultado = resultado.filter(p => {
+        const catProduto = (p.categoria || '').toLowerCase();
+        const nomeProduto = (p.nome || '').toLowerCase();
+
+        if (catBusca === 'esporte') {
+          return catProduto.includes('esport') || catProduto.includes('futsal') || catProduto.includes('corrida') || nomeProduto.includes('chuteira') || nomeProduto.includes('tênis');
+        }
+        if (catBusca === 'masculino') {
+          return catProduto.includes('masculino') || catProduto.includes('sapato') || catProduto.includes('social') || catProduto.includes('botina');
+        }
+        if (catBusca === 'feminino') {
+          return catProduto.includes('feminino') || catProduto.includes('sandália') || catProduto.includes('rasteirinha') || catProduto.includes('tamanco') || catProduto.includes('sapatilha');
+        }
+
+        return catProduto.includes(catBusca);
+      });
+    }
+
+    // Filtro por Termo de Busca
+    if (termoBusca.trim() !== '') {
+      const termo = termoBusca.toLowerCase();
+      resultado = resultado.filter(p => 
+        (p.nome && p.nome.toLowerCase().includes(termo)) ||
+        (p.marca && p.marca.toLowerCase().includes(termo)) ||
+        (p.cor && p.cor.toLowerCase().includes(termo)) ||
+        (p.numeracao && p.numeracao.toString().toLowerCase().includes(termo)) ||
+        (p.descricao && p.descricao.toLowerCase().includes(termo))
+      );
+    }
+
+    // Ordenação
+    if (ordenacao === 'az') {
+      resultado.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    } else if (ordenacao === 'za') {
+      resultado.sort((a, b) => (b.nome || '').localeCompare(a.nome || ''));
+    } else if (ordenacao === 'estoque') {
+      resultado.sort((a, b) => (Number(a.quantidade) || 0) - (Number(b.quantidade) || 0));
+    }
+
+    setProdutosFiltrados(resultado);
+  }, [categoriaSelecionada, termoBusca, ordenacao, todosProdutos]);
+
+  const carregarProdutos = async () => {
+    try {
+      const resposta = await fetch(`${API_URL}/produtos`);
+      const dados = await resposta.json();
+      
+      if (Array.isArray(dados)) {
+        setTodosProdutos(dados);
+        setProdutosFiltrados(dados);
+      } else {
+        setTodosProdutos([]);
+        setProdutosFiltrados([]);
+      }
+    } catch (erro) {
+      console.error("Erro ao conectar com o banco de dados via backend:", erro);
+      setTodosProdutos([]);
+      setProdutosFiltrados([]);
+    }
+  };
+
+  const handleBuscar = (e) => {
+    e.preventDefault();
+  };
 
   return (
     <div className="site-wrapper">
-      {/* Barra de Segurança Superior */}
       <div className="top-bar-security">
-        <span>🔒 Compra 100% Segura e Verificada</span>
-        <span>🛡️ Site Protegido com Criptografia SSL</span>
-        <span>⚡ Atendimento e Suporte via WhatsApp</span>
+        <span>Compra 100% Segura e Verificada</span>
+        <span>Site Protegido com Criptografia SSL</span>
+        <span>Atendimento e Suporte via WhatsApp</span>
       </div>
 
-      {/* Cabeçalho e Menu */}
       <header className="main-header">
-        <div className="header-container">
-          <h1 className="logo">CALÇADOS <span>MARIANO</span></h1>
-          <p className="slogan">O melhor estilo para os seus pés</p>
+        <div className="header-top-container">
+          <div className="header-container">
+            <h1 className="logo">CALÇADOS <span>MARIANO</span></h1>
+            <p className="slogan">A loja do Antônio Lasmar</p>
+          </div>
+
+          <div className="theme-switch-wrapper">
+            <label className="theme-switch" htmlFor="checkbox">
+              <input 
+                type="checkbox" 
+                id="checkbox" 
+                checked={darkMode} 
+                onChange={(e) => setDarkMode(e.target.checked)} 
+              />
+              <div className="slider round"></div>
+            </label>
+            <span className="theme-label">{darkMode ? 'Escuro' : 'Claro'}</span>
+          </div>
         </div>
 
-        <nav className="nav-categorias">
-          {['Todos', 'Masculino', 'Feminino', 'Esporte'].map((cat) => (
-            <button
-              key={cat}
-              className={`btn-categoria ${categoriaSelecionada === cat ? 'ativo' : ''}`}
-              onClick={() => setCategoriaSelecionada(cat)}
+        <form onSubmit={handleBuscar} className="search-bar-container">
+          <input 
+            type="text" 
+            placeholder="Pesquisar calçado, marca, cor ou numeração..." 
+            value={termoBusca}
+            onChange={(e) => setTermoBusca(e.target.value)}
+          />
+          <button type="submit">Buscar</button>
+        </form>
+
+        <div className="header-actions-bar">
+          <nav className="nav-categorias">
+            {['Todos', 'Masculino', 'Feminino', 'Esporte'].map((cat) => (
+              <button
+                key={cat}
+                className={`btn-categoria ${categoriaSelecionada === cat ? 'ativo' : ''}`}
+                onClick={() => setCategoriaSelecionada(cat)}
+              >
+                {cat}
+              </button>
+            ))}
+          </nav>
+
+          <div className="ordenacao-container">
+            <select 
+              value={ordenacao} 
+              onChange={(e) => setOrdenacao(e.target.value)}
+              className="select-ordenacao"
             >
-              {cat}
-            </button>
-          ))}
-        </nav>
+              <option value="padrao">Ordenar por: Destaques</option>
+              <option value="az">Nome: A - Z</option>
+              <option value="za">Nome: Z - A</option>
+              <option value="estoque">Menor Estoque</option>
+            </select>
+          </div>
+        </div>
       </header>
 
-      {/* Vitrine Principal */}
       <main className="container">
         <div className="section-title">
-          <h2>Destaques da Semana ({categoriaSelecionada})</h2>
-          <p>Clique em qualquer calçado para ver detalhes completos e garantir o seu!</p>
+          <h2>Catálogo de Produtos ({categoriaSelecionada})</h2>
+          <p>Consulte os tamanhos, cores e tire dúvidas diretamente com nossa equipe</p>
         </div>
 
         <div className="grid-produtos">
           {produtosFiltrados.length > 0 ? (
             produtosFiltrados.map((produto) => {
+              const qtd = Number(produto.quantidade) || 0;
+              const ehUltimosPares = qtd > 0 && qtd <= 3;
+
               return (
                 <div 
                   className="card" 
-                  key={produto.id} 
+                  key={produto.id || produto._id} 
                   onClick={() => setProdutoSelecionado(produto)}
                   style={{ cursor: 'pointer' }}
                 >
-                  <div className="badge-seguranca">🛡️ Garantia Mariano</div>
-                  <img src={produto.imagem_url} alt={produto.nome} />
+                  <div className="badge-seguranca">Garantia Mariano</div>
+                  
+                  {ehUltimosPares && (
+                    <div className="badge-ultimos-pares">Ultimos Pares!</div>
+                  )}
+
+                  <img src={produto.imagem_url || produto.imagem || "https://via.placeholder.com/300x300?text=Sem+Imagem"} alt={produto.nome} />
                   <div className="card-info">
-                    <span className="marca">{produto.marca}</span>
+                    <span className="marca">{produto.marca || produto.categoria}</span>
                     <h2>{produto.nome}</h2>
-                    <p className="tamanhos">Tamanhos: {produto.tamanhos}</p>
-                    <p className="preco">R$ {produto.preco.toFixed(2).replace('.', ',')}</p>
+                    <p className="tamanhos">Numeração: {produto.numeracao || produto.tamanhos}</p>
+                    <p className="cor-card">
+                      Cor: <strong>{produto.cor || 'Única'}</strong>
+                    </p>
                     
-                    <button className="btn-whatsapp" style={{ width: '100%', border: 'none', pointerEvents: 'none' }}>
-                      Ver Detalhes 🔍
+                    <button className="btn-whatsapp" style={{ width: '100%', border: 'none', pointerEvents: 'none', marginTop: '10px' }}>
+                      Ver Detalhes
                     </button>
                   </div>
                 </div>
@@ -160,41 +210,58 @@ function App() {
             })
           ) : (
             <p style={{ textAlign: 'center', gridColumn: '1 / -1', color: '#666', padding: '40px' }}>
-              Nenhum produto encontrado nesta categoria no momento.
+              Nenhum produto encontrado no banco de dados.
             </p>
           )}
         </div>
       </main>
 
-      {/* MODAL (JANELA) DE DETALHES DO PRODUTO */}
       {produtoSelecionado && (
         <div className="modal-overlay" onClick={() => setProdutoSelecionado(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setProdutoSelecionado(null)}>✕</button>
+            <button className="modal-close" onClick={() => setProdutoSelecionado(null)}>X</button>
             
             <div className="modal-grid">
               <div className="modal-img-container">
-                <img src={produtoSelecionado.imagem_url} alt={produtoSelecionado.nome} />
+                <img src={produtoSelecionado.imagem_url || produtoSelecionado.imagem || "https://via.placeholder.com/300x300?text=Sem+Imagem"} alt={produtoSelecionado.nome} />
               </div>
               <div className="modal-details">
-                <span className="marca">{produtoSelecionado.marca}</span>
+                <span className="marca">{produtoSelecionado.marca || produtoSelecionado.categoria}</span>
                 <h2>{produtoSelecionado.nome}</h2>
-                <p className="modal-preco">R$ {produtoSelecionado.preco.toFixed(2).replace('.', ',')}</p>
                 
                 <div className="modal-secao-info">
-                  <p><strong>Tamanhos Disponíveis:</strong> {produtoSelecionado.tamanhos}</p>
-                  <p><strong>Descrição do Calçado:</strong> {produtoSelecionado.descricao}</p>
+                  <p><strong>Numeração Disponível:</strong> {produtoSelecionado.numeracao || produtoSelecionado.tamanhos}</p>
+                  <p><strong>Cor Disponível:</strong> <span style={{ fontWeight: 'bold' }}>{produtoSelecionado.cor || 'Única'}</span></p>
+                  <p>
+                    <strong>Quantidade em Estoque:</strong>{' '}
+                    {produtoSelecionado.quantidade === 0 || produtoSelecionado.quantidade === '0' ? (
+                      <span style={{ backgroundColor: '#ffcccc', color: '#cc0000', padding: '3px 8px', borderRadius: '4px', fontWeight: 'bold', display: 'inline-block' }}>
+                        Produto Esgotado
+                      </span>
+                    ) : (
+                      <>
+                        {produtoSelecionado.quantidade}
+                        {Number(produtoSelecionado.quantidade) <= 3 && (
+                          <span style={{ marginLeft: '10px', backgroundColor: '#fff3cd', color: '#856404', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                            Poucas unidades!
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </p>
+                  <p><strong>Detalhes:</strong> {produtoSelecionado.descricao || "Calçado original com total garantia de qualidade da Calçados Mariano."}</p>
                 </div>
 
                 <div className="modal-botoes">
+                  {/* Mensagem Inteligente do WhatsApp 100% sem Emojis */}
                   <a 
-                    href={`https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(`Olá! Tenho interesse no modelo: ${produtoSelecionado.nome} (Ref: ${produtoSelecionado.id})`)}`} 
+                    href={`https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(`Ola, equipe Calcados Mariano!\n\nEstive olhando o site e tenho interesse neste modelo:\nProduto: ${produtoSelecionado.nome}\nCor: ${produtoSelecionado.cor || 'Única'}\nNumeracao: ${produtoSelecionado.numeracao || 'Consultar'}\nRef: ${produtoSelecionado.id}\n\nGostaria de confirmar a disponibilidade para provar ou comprar!`)}`} 
                     target="_blank" 
                     rel="noreferrer" 
                     className="btn-whatsapp"
                     style={{ textAlign: 'center', display: 'block', padding: '12px', textDecoration: 'none' }}
                   >
-                    Comprar / Tirar Dúvidas no WhatsApp 💬
+                    Consultar no WhatsApp
                   </a>
                 </div>
               </div>
@@ -203,24 +270,23 @@ function App() {
         </div>
       )}
 
-      {/* Rodapé institucional com os dados da loja */}
       <footer className="main-footer">
         <div className="footer-content">
           <div className="footer-col">
             <h3>Calçados Mariano</h3>
-            <p>A loja do Antonio Lasmar! 40 anos calçando você e sua família!!</p>
+            <p>Tradição e qualidade em calçados para toda a família.</p>
           </div>
           <div className="footer-col">
             <h3>Nossos Contatos & Lojas (Bambuí - MG)</h3>
-            <p>📞 Matriz: (37) 3431-2762</p>
-            <p>📞 Filial: (37) 3431-2270</p>
-            <p>📱 WhatsApp: (37) 99827-5086</p>
+            <p>Matriz: (37) 3431-2762</p>
+            <p>Filial: (37) 3431-2270</p>
+            <p>WhatsApp: (37) 9841-4547</p>
           </div>
           <div className="footer-col">
             <h3>Segurança e Privacidade</h3>
-            <p>🛡️ Ambiente 100% Seguro</p>
-            <p>✔️ Parcerias Verificadas</p>
-            <p>🔒 Seus dados protegidos</p>
+            <p>Ambiente 100% Seguro</p>
+            <p>Parcerias Verificadas</p>
+            <p>Seus dados protegidos</p>
           </div>
         </div>
         <div className="footer-bottom">
