@@ -3,7 +3,7 @@
 
 // URL base da API. Em desenvolvimento, o vite.config.js encaminha /produtos e /health
 // para a porta 3000, portanto o padrão vazio funciona sem variável de ambiente.
-export const URL_API = import.meta.env.VITE_API_URL || '';
+export const URL_API = import.meta.env.VITE_API_URL || 'https://calcados-mariano.onrender.com';
 
 // Acima deste limite, o estoque está confortável. Abaixo ou igual, a linha recebe
 // destaque na tabela. Este é o motivo de existir do sistema.
