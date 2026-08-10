@@ -4,7 +4,7 @@ require('./config/ambiente').carregarAmbiente();
 
 const path = require('path');
 const Database = require('sqlite3');
-const { carregarAmbiente } = require('./ambiente');
+const { carregarAmbiente } = require('./config/ambiente');
 
 carregarAmbiente();
 
