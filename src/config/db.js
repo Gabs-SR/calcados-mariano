@@ -19,15 +19,24 @@ if (process.env.DATABASE_URL) {
             // Converte sintaxe básica do SQLite para Postgres se necessário, ou executa direto
             return {
                 all: async (...params) => {
-                    const res = await pool.query(sql.replace(/\?/g, (_, i) => `$${i + 1}`), params);
+                    const res = await pool.query(
+                        sql.replace(/\?/g, (_, i) => `$${i + 1}`),
+                        params
+                    );
                     return res.rows;
                 },
                 get: async (...params) => {
-                    const res = await pool.query(sql.replace(/\?/g, (_, i) => `$${i + 1}`), params);
+                    const res = await pool.query(
+                        sql.replace(/\?/g, (_, i) => `$${i + 1}`),
+                        params
+                    );
                     return res.rows[0];
                 },
                 run: async (...params) => {
-                    const res = await pool.query(sql.replace(/\?/g, (_, i) => `$${i + 1}`), params);
+                    const res = await pool.query(
+                        sql.replace(/\?/g, (_, i) => `$${i + 1}`),
+                        params
+                    );
                     return { lastInsertRowid: res.rows[0]?.id };
                 }
             };
@@ -38,7 +47,8 @@ if (process.env.DATABASE_URL) {
     };
 
     // Inicializa as tabelas no PostgreSQL do Supabase de forma assíncrona segura
-    pool.query(`
+    pool.query(
+        `
         CREATE TABLE IF NOT EXISTS produtos (
             id SERIAL PRIMARY KEY,
             nome TEXT NOT NULL,
@@ -54,8 +64,8 @@ if (process.env.DATABASE_URL) {
             id TEXT PRIMARY KEY,
             criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-    `).catch(err => console.error("Erro ao criar tabelas no Postgres:", err));
-
+    `
+    ).catch((err) => console.error('Erro ao criar tabelas no Postgres:', err));
 } else {
     // Modo local: continua usando SQLite normalmente na sua máquina
     const Database = require('sqlite3');

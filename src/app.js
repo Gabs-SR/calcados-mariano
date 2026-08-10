@@ -37,7 +37,7 @@ db.serialize(() => {
 });
 
 // Adicione o banco à instância do express para usar nas rotas
-app.db = db; 
+app.db = db;
 
 // EXPORTE O APP (que agora é a instância do Express)
 module.exports = app;
