@@ -318,7 +318,13 @@ input:checked + .slider:before {
   gap: 25px;
 }
 
+/* Card ajustado como botão acessível mantendo visual de cartão */
 .card {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
   background-color: var(--card-bg);
   border: 1px solid var(--cinza-borda);
   border-radius: 12px;
@@ -353,7 +359,6 @@ input:checked + .slider:before {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
 
-/* Etiqueta de Últimos Pares no Card */
 .badge-ultimos-pares {
   position: absolute;
   top: 12px;
@@ -367,6 +372,19 @@ input:checked + .slider:before {
   z-index: 2;
   letter-spacing: 0.5px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.badge-esgotado {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: #ffcccc;
+  color: #a30000;
+  font-size: 0.8rem;
+  font-weight: 700;
+  z-index: 2;
 }
 
 .card img {
@@ -402,21 +420,11 @@ input:checked + .slider:before {
   line-height: 1.4;
 }
 
-.tamanhos {
-  font-size: 12px;
-  color: var(--tag-color);
-  margin-bottom: 6px;
-  background-color: var(--tag-bg);
-  padding: 6px 10px;
-  border-radius: 4px;
-  display: inline-block;
-  font-weight: 500;
-}
-
+.tamanhos,
 .cor-card {
   font-size: 12px;
   color: var(--tag-color);
-  margin-bottom: 15px;
+  margin-bottom: 6px;
   background-color: var(--tag-bg);
   padding: 6px 10px;
   border-radius: 4px;
@@ -437,12 +445,63 @@ input:checked + .slider:before {
   font-size: 14px;
   transition: all 0.2s ease;
   box-shadow: 0 4px 10px rgba(37, 211, 102, 0.2);
+  margin-top: 10px;
 }
 
 .btn-whatsapp:hover {
   background-color: #1ebd59;
   transform: scale(1.02);
   box-shadow: 0 6px 15px rgba(37, 211, 102, 0.3);
+}
+
+.card-acao {
+  display: block;
+  margin-top: 10px;
+  padding: 10px;
+  text-align: center;
+  border-radius: 6px;
+  background: #25d366;
+  color: #fff;
+  font-weight: 600;
+}
+
+.aviso-vitrine {
+  grid-column: 1 / -1;
+  padding: 40px;
+  text-align: center;
+  color: #666;
+}
+
+body.dark-mode .aviso-vitrine {
+  color: #bbb;
+}
+
+.marca-esgotado {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #ffcccc;
+  color: #c00;
+  font-weight: 700;
+}
+
+.marca-poucas {
+  margin-left: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #fff3cd;
+  color: #856404;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* Acessibilidade de Teclado com Borda Vermelha no Foco */
+.card:focus-visible,
+.btn-categoria:focus-visible,
+.modal-close:focus-visible,
+.search-bar-container input:focus-visible,
+.search-bar-container button:focus-visible {
+  outline: 3px solid var(--vermelho);
+  outline-offset: 2px;
 }
 
 /* Rodapé */
@@ -632,86 +691,4 @@ input:checked + .slider:before {
     flex-direction: column;
     gap: 20px;
   }
-}
-/* ---------------------------------------------------------------------------
-   Ajustes da integração com a API.
-
-   O card virou <button>: ele sempre foi clicável, mas como <div> ninguém
-   chegava nele pelo teclado, e leitor de tela não anunciava que dava para
-   abrir. Estes estilos tiram a aparência de botão e devolvem a de cartão.
-   --------------------------------------------------------------------------- */
-
-.card {
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  border: none;
-  cursor: pointer;
-  width: 100%;
-}
-
-.card:focus-visible,
-.btn-categoria:focus-visible,
-.modal-close:focus-visible {
-  outline: 3px solid #6c4bd6;
-  outline-offset: 2px;
-}
-
-.card-acao {
-  display: block;
-  margin-top: 10px;
-  padding: 10px;
-  text-align: center;
-  border-radius: 6px;
-  background: #25d366;
-  color: #fff;
-  font-weight: 600;
-}
-
-.badge-esgotado {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  padding: 4px 10px;
-  border-radius: 4px;
-  background: #ffcccc;
-  color: #a30000;
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.aviso-vitrine {
-  grid-column: 1 / -1;
-  padding: 40px;
-  text-align: center;
-  color: #666;
-}
-
-.marca-esgotado {
-  padding: 3px 8px;
-  border-radius: 4px;
-  background: #ffcccc;
-  color: #c00;
-  font-weight: 700;
-}
-
-.marca-poucas {
-  margin-left: 10px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: #fff3cd;
-  color: #856404;
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.btn-whatsapp {
-  display: block;
-  padding: 12px;
-  text-align: center;
-  text-decoration: none;
-}
-
-body.dark-mode .aviso-vitrine {
-  color: #bbb;
 }

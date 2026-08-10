@@ -128,13 +128,6 @@ function VitrineApp() {
 
   return (
     <div className="site-wrapper">
-      {/*
-       * A barra antiga anunciava "Compra 100% Segura", "Criptografia SSL" e
-       * "Seus dados protegidos". Nada disso acontece aqui: a vitrine não
-       * vende, não recebe pagamento e não coleta dado nenhum. Prometer isso
-       * numa tela que representa uma loja real é propaganda enganosa, e o
-       * cliente que acreditasse esperaria uma compra que o site não faz.
-       */}
       <div className="top-bar-security">
         <span>Atendimento pelo WhatsApp</span>
         <span>Retirada nas lojas de {LOJA.cidade}</span>
@@ -165,8 +158,6 @@ function VitrineApp() {
         </div>
 
         <form onSubmit={aoBuscar} className="search-bar-container" role="search">
-          {/* `search` e não `text`: o teclado do celular mostra a
-                        tecla de busca, e o navegador oferece o botão de limpar. */}
           <input
             type="search"
             aria-label="Pesquisar calçado pelo nome"
