@@ -3,7 +3,7 @@
 require('./config/ambiente').carregarAmbiente();
 
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('sqlite3');
 const { carregarAmbiente } = require('./ambiente');
 
 carregarAmbiente();

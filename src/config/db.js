@@ -58,7 +58,7 @@ if (process.env.DATABASE_URL) {
 
 } else {
     // Modo local: continua usando SQLite normalmente na sua máquina
-    const Database = require('better-sqlite3');
+    const Database = require('sqlite3');
     const caminhoDb = process.env.DB_PATH || path.resolve(__dirname, '../../database.sqlite');
     db = new Database(caminhoDb);
 
