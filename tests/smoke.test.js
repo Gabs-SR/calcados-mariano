@@ -1,50 +1,107 @@
-// Smoke tests. Respondem a pergunta mais básica: o sistema sobe e atende.
-// Se estes testes falham, não vale olhar mais nada.
-
-// describe, it, expect, beforeAll e afterAll vêm de globals: true no vitest.config.js
 const request = require('supertest');
-const { criarBancoDeTeste, contarProdutosDaCarga } = require('./helpers/bancoDeTeste');
+const { vi, describe, it, expect } = require('vitest');
 
-let app;
-let banco;
+const { produtos, dbMock } = vi.hoisted(() => {
+    const produtos = [
+        {
+            id: 1,
+            nome: 'Bota Texana',
+            numeracao: '41',
+            categoria: 'Bota texana',
+            publico: 'Masculino',
+            quantidade: 8,
+            status_estoque: 'Em estoque',
+            marca: 'Mariano',
+            cor: 'Preto',
+            descricao: 'Bota de couro.',
+            imagem_url: null,
+            nome_ordenacao: 'bota texana'
+        },
+        {
+            id: 2,
+            nome: 'Chuteira Nike',
+            numeracao: '39/40',
+            categoria: 'Chuteira de futsal',
+            publico: 'Unissex',
+            quantidade: 15,
+            status_estoque: 'Em estoque',
+            marca: 'Nike',
+            cor: 'Azul',
+            descricao: 'Chuteira para quadra.',
+            imagem_url: null,
+            nome_ordenacao: 'chuteira nike'
+        },
+        {
+            id: 3,
+            nome: 'Sandália Feminina',
+            numeracao: '37',
+            categoria: 'Sandália',
+            publico: 'Feminino',
+            quantidade: 4,
+            status_estoque: 'Em estoque',
+            marca: 'Mariano',
+            cor: 'Bege',
+            descricao: 'Sandália casual.',
+            imagem_url: null,
+            nome_ordenacao: 'sandalia feminina'
+        }
+    ];
 
-beforeAll(async () => {
-    banco = await criarBancoDeTeste();
-    // O require vem depois de criarBancoDeTeste, porque src/config/db.js lê DB_PATH
-    // quando o módulo carrega.
-    app = require('../src/app');
+    const dbMock = {
+        query: vi.fn(async () => ({ rows: [{ id: 4 }] })),
+        buscarUm: vi.fn(async (sql) => {
+            if (sql.includes('COUNT(*)')) return { total: produtos.length };
+            return produtos[0];
+        }),
+        buscarTodos: vi.fn(async (sql) => {
+            if (sql.includes('DISTINCT')) {
+                if (sql.includes('publico')) {
+                    return [...new Set(produtos.map((p) => p.publico))].map((valor) => ({ valor }));
+                }
+                return [...new Set(produtos.map((p) => p.categoria))].map((valor) => ({ valor }));
+            }
+            return produtos;
+        })
+    };
+
+    return { produtos, dbMock };
 });
 
-afterAll(() => banco.limpar());
+vi.mock('../src/config/db', () => dbMock);
 
-describe('smoke', () => {
-    it('carrega o app sem lançar erro', () => {
+const app = require('../src/app');
+
+describe('API smoke', () => {
+    it('carrega o Express sem depender de SQLite', () => {
         expect(app).toBeDefined();
         expect(typeof app.use).toBe('function');
     });
 
-    it('GET /health responde 200 e diz que o banco respondeu', async () => {
-        const resposta = await request(app).get('/health');
-
-        expect(resposta.status).toBe(200);
-        expect(resposta.body.status).toBe('ok');
-        expect(resposta.body.banco).toBe('conectado');
-        expect(resposta.body.produtos).toBe(contarProdutosDaCarga());
-    });
-
-    it('GET /produtos responde 200 com o envelope da listagem', async () => {
-        const resposta = await request(app).get('/produtos');
-
-        expect(resposta.status).toBe(200);
-        expect(Array.isArray(resposta.body.produtos)).toBe(true);
-        expect(resposta.body.produtos).toHaveLength(contarProdutosDaCarga());
-        expect(resposta.body.total).toBe(contarProdutosDaCarga());
-    });
-
-    it('GET / responde 200 com texto puro', async () => {
+    it('GET / responde com a identificação da API', async () => {
         const resposta = await request(app).get('/');
 
         expect(resposta.status).toBe(200);
         expect(resposta.text).toContain('Calçados Mariano');
+    });
+
+    it('GET /health consulta a tabela de produtos', async () => {
+        const resposta = await request(app).get('/health');
+
+        expect(resposta.status).toBe(200);
+        expect(resposta.body).toEqual({
+            status: 'ok',
+            banco: 'conectado',
+            produtos: produtos.length
+        });
+        expect(dbMock.buscarUm).toHaveBeenCalledWith('SELECT COUNT(*)::integer AS total FROM produtos');
+    });
+
+    it('GET /produtos entrega o envelope esperado pela vitrine', async () => {
+        const resposta = await request(app).get('/produtos');
+
+        expect(resposta.status).toBe(200);
+        expect(resposta.body.produtos).toEqual(produtos);
+        expect(resposta.body.total).toBe(produtos.length);
+        expect(resposta.body.pagina).toBe(1);
     });
 });

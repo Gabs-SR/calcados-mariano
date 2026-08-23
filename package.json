@@ -26,22 +26,23 @@
     "estoque",
     "calcados",
     "express",
-    "sqlite",
+    "postgresql",
+    "supabase",
     "api-rest"
   ],
   "author": "",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RxSaturn/calcados-mariano.git"
+    "url": "git+https://github.com/Gabs-SR/calcados-mariano.git"
   },
   "bugs": {
-    "url": "https://github.com/RxSaturn/calcados-mariano/issues"
+    "url": "https://github.com/Gabs-SR/calcados-mariano/issues"
   },
-  "homepage": "https://github.com/RxSaturn/calcados-mariano#readme",
+  "homepage": "https://github.com/Gabs-SR/calcados-mariano#readme",
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "sqlite3": "^6.0.1",
+    "pg": "^8.16.3",
     "vite": "^8.2.1"
   },
   "devDependencies": {

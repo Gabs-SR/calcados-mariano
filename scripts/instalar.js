@@ -1,18 +1,4 @@
 #!/usr/bin/env node
-/**
- * Instala o sistema na máquina da loja, do zero até rodando.
- *
- *     npm run instalar
- *
- * **Por que existe.** O roteiro anterior tinha sete passos em dois terminais, e
- * três deles falhavam calados. Sem `ADMIN_SENHA_HASH` o painel sobe bonito e
- * recusa todo cadastro com 503 — quem instala descobre isso no dia seguinte,
- * quando o dono da loja tenta usar. Sem compilar o front, o servidor entrega a
- * API e nenhuma tela. Ordem errada entre banco e servidor dá um erro que fala
- * de outra coisa.
- *
- * Aqui a ordem é do programa, e ele para no primeiro passo que falhar.
- */
 
 const { execFileSync } = require('child_process');
 const crypto = require('crypto');
@@ -27,98 +13,73 @@ const NODE_MINIMO = 22;
 const SENHA_MINIMA = 10;
 
 const cor = {
-    ok: (t) => `\x1b[32m${t}\x1b[0m`,
-    erro: (t) => `\x1b[31m${t}\x1b[0m`,
-    fraco: (t) => `\x1b[2m${t}\x1b[0m`
+    ok: (texto) => `\x1b[32m${texto}\x1b[0m`,
+    erro: (texto) => `\x1b[31m${texto}\x1b[0m`,
+    fraco: (texto) => `\x1b[2m${texto}\x1b[0m`
 };
 
 let passoAtual = 0;
-function passo(texto) {
+const passo = (texto) => {
     passoAtual += 1;
-    console.log(`\n${cor.fraco(`[${passoAtual}/6]`)} ${texto}`);
-}
+    console.log(`\n${cor.fraco(`[${passoAtual}/5]`)} ${texto}`);
+};
 
-function rodar(comando, argumentos, pasta = RAIZ) {
+const rodar = (comando, argumentos, pasta = RAIZ) => {
     execFileSync(comando, argumentos, {
         cwd: pasta,
         stdio: 'inherit',
         shell: process.platform === 'win32'
     });
-}
+};
 
-function perguntar(rl, texto, padrao) {
-    const sufixo = padrao ? cor.fraco(` [${padrao}]`) : '';
-    return new Promise((resolve) =>
-        rl.question(`${texto}${sufixo}: `, (r) => resolve(r.trim() || padrao || ''))
+const perguntar = (rl, texto, padrao = '') =>
+    new Promise((resolve) =>
+        rl.question(`${texto}${padrao ? ` [${padrao}]` : ''}: `, (resposta) =>
+            resolve(resposta.trim() || padrao)
+        )
     );
-}
 
-/**
- * Lê a senha sem mostrar na tela.
- *
- * Instalação de loja acontece com gente em volta, e a senha do painel é a única
- * credencial do sistema. Ecoar no terminal a deixa no histórico da sessão e à
- * vista de quem estiver olhando.
- */
-function perguntarSenha(texto) {
-    return new Promise((resolve) => {
+const perguntarSenha = (texto) =>
+    new Promise((resolve) => {
         const entrada = process.stdin;
-        const tinhaModoBruto = entrada.isTTY;
+        const raw = entrada.isTTY;
         process.stdout.write(`${texto}: `);
-        if (tinhaModoBruto) entrada.setRawMode(true);
+        if (raw) entrada.setRawMode(true);
         entrada.resume();
         entrada.setEncoding('utf8');
 
         let senha = '';
-        const aoDigitar = (tecla) => {
-            if (tecla === '\r' || tecla === '\n' || tecla === '\u0004') {
-                if (tinhaModoBruto) entrada.setRawMode(false);
-                entrada.removeListener('data', aoDigitar);
+        const receber = (tecla) => {
+            if (tecla === '\r' || tecla === '\n') {
+                if (raw) entrada.setRawMode(false);
+                entrada.removeListener('data', receber);
                 entrada.pause();
                 process.stdout.write('\n');
-                return resolve(senha);
-            }
-            if (tecla === '\u0003') {
-                // Ctrl+C precisa continuar encerrando, mesmo em modo bruto.
-                if (tinhaModoBruto) entrada.setRawMode(false);
-                process.stdout.write('\n');
-                process.exit(1);
-            }
-            if (tecla === '\u007f' || tecla === '\b') {
-                senha = senha.slice(0, -1);
+                resolve(senha);
                 return;
             }
-            senha += tecla;
+            if (tecla === '\u0003') process.exit(1);
+            if (tecla === '\u007f' || tecla === '\b') senha = senha.slice(0, -1);
+            else senha += tecla;
         };
-        entrada.on('data', aoDigitar);
+
+        entrada.on('data', receber);
     });
-}
 
 function conferirNode() {
     passo('Conferindo o Node.js');
     const versao = Number(process.versions.node.split('.')[0]);
     if (versao < NODE_MINIMO) {
-        console.error(
-            cor.erro(
-                `\nEste sistema precisa do Node ${NODE_MINIMO} ou mais novo. ` +
-                    `Esta máquina tem o ${process.versions.node}.\n`
-            )
-        );
-        console.error('Baixe em https://nodejs.org e rode a instalação de novo.\n');
-        process.exit(1);
+        throw new Error(`Este sistema precisa do Node ${NODE_MINIMO} ou mais novo.`);
     }
     console.log(`${cor.ok('✓')} Node ${process.versions.node}`);
 }
 
 function instalarDependencias() {
     passo('Instalando as dependências');
-    // `npm ci` respeita o package-lock. `npm install` resolveria versões novas na
-    // máquina do cliente, e a instalação deixaria de ser igual à que foi testada.
-    rodar('npm', ['ci']);
-    // O `--include=dev` é obrigatório: as ferramentas de compilação do front são
-    // devDependencies, e com NODE_ENV=production o npm as pula.
-    rodar('npm', ['ci', '--include=dev'], path.join(RAIZ, 'web'));
-    console.log(`${cor.ok('✓')} dependências dos dois lados`);
+    rodar('npm', ['install']);
+    rodar('npm', ['install'], path.join(RAIZ, 'web'));
+    console.log(`${cor.ok('✓')} dependências instaladas`);
 }
 
 async function prepararConfiguracao() {
@@ -127,108 +88,76 @@ async function prepararConfiguracao() {
     const destino = path.join(RAIZ, '.env');
     if (fs.existsSync(destino)) {
         const conteudo = fs.readFileSync(destino, 'utf8');
-        const temSenha = /^ADMIN_SENHA_HASH=.+$/m.test(conteudo);
-        if (temSenha) {
-            console.log(`${cor.ok('✓')} .env já existe ${cor.fraco('(mantido como está)')}`);
+        if (/^DATABASE_URL=.+$/m.test(conteudo) && /^ADMIN_SENHA_HASH=.+$/m.test(conteudo)) {
+            console.log(`${cor.ok('✓')} .env existente mantido`);
             return;
         }
-        console.log(cor.fraco('  .env existe mas está sem senha de painel. Vou completar.'));
     }
 
-    /*
-     * As respostas podem vir do ambiente. Isso serve para instalar sem ninguém
-     * na frente do terminal, e é o que permite exercitar a instalação inteira
-     * num teste — uma instalação que só funciona com gente digitando não tem
-     * como ser verificada antes de chegar na loja.
-     */
-    const semPergunta = Boolean(process.env.INSTALAR_SENHA);
+    let databaseUrl = process.env.INSTALAR_DATABASE_URL || '';
+    let senha = process.env.INSTALAR_SENHA || '';
     let porta = process.env.INSTALAR_PORTA || '3000';
 
-    if (!semPergunta) {
+    if (!databaseUrl || !senha) {
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-        console.log(cor.fraco('\nResponda com Enter para aceitar o valor entre colchetes.\n'));
-        porta = await perguntar(rl, 'Porta do sistema', '3000');
+        console.log(cor.fraco('\nInforme a conexão PostgreSQL fornecida pelo Supabase.'));
+        databaseUrl = databaseUrl || (await perguntar(rl, 'DATABASE_URL'));
+        porta = await perguntar(rl, 'Porta', porta);
         rl.close();
     }
 
-    console.log(
-        cor.fraco(
-            '\nAgora a senha do painel de estoque. É ela que o dono da loja usa\n' +
-                'para cadastrar e editar produtos. Ela não aparece enquanto você digita.\n'
-        )
-    );
+    if (!databaseUrl) throw new Error('DATABASE_URL é obrigatória.');
 
-    let senha = process.env.INSTALAR_SENHA || '';
-    if (senha && senha.length < SENHA_MINIMA) {
-        console.error(
-            cor.erro(
-                `\nINSTALAR_SENHA tem ${senha.length} caracteres. Use pelo menos ${SENHA_MINIMA}.\n`
-            )
-        );
-        process.exit(1);
-    }
     while (!senha) {
         senha = await perguntarSenha(`Senha do painel (mínimo ${SENHA_MINIMA} caracteres)`);
         if (senha.length < SENHA_MINIMA) {
-            console.log(
-                cor.erro(`  são ${senha.length} caracteres. Use pelo menos ${SENHA_MINIMA}.`)
-            );
+            console.log(cor.erro(`Use pelo menos ${SENHA_MINIMA} caracteres.`));
+            senha = '';
             continue;
         }
-        const repetida = await perguntarSenha('Digite de novo para conferir');
-        if (repetida !== senha) {
-            console.log(cor.erro('  as duas não são iguais. Vamos de novo.'));
-            continue;
+        const repetida = await perguntarSenha('Digite a senha novamente');
+        if (senha !== repetida) {
+            console.log(cor.erro('As senhas não são iguais.'));
+            senha = '';
         }
-        break;
     }
 
     const linhas = [
         `PORT=${porta}`,
+        `DATABASE_URL=${databaseUrl}`,
         '',
-        '# Senha do painel, guardada como hash. A senha em texto não fica em lugar nenhum.',
-        `ADMIN_SENHA_HASH=${gerarHashDeSenha(senha)}`,
-        '',
-        '# Assina os cookies de sessão. Trocar esta chave derruba quem estiver logado.',
-        `SESSAO_SEGREDO=${crypto.randomBytes(32).toString('hex')}`,
-        '',
-        '# Só é usado quando a interface é servida de outro endereço. Na máquina da',
-        '# loja fica em branco: o mesmo servidor entrega as telas e a API.',
         'CORS_ORIGINS=',
+        '',
+        `ADMIN_SENHA_HASH=${gerarHashDeSenha(senha)}`,
+        `SESSAO_SEGREDO=${crypto.randomBytes(32).toString('hex')}`,
         ''
     ].join('\n');
 
-    // 0o600: só o dono do arquivo lê. Aqui dentro estão o hash da senha e a
-    // chave que assina as sessões.
-    fs.writeFileSync(destino, linhas, { mode: 0o600 });
-    console.log(`${cor.ok('✓')} .env criado ${cor.fraco('(só o dono do arquivo consegue ler)')}`);
+    fs.writeFileSync(destino, linhas, { encoding: 'utf8', mode: 0o600 });
+    console.log(`${cor.ok('✓')} .env configurado`);
 }
 
 function prepararBanco() {
-    passo('Preparando o banco de dados');
+    passo('Preparando o PostgreSQL/Supabase');
     rodar('npm', ['run', 'db:setup']);
     console.log(`${cor.ok('✓')} banco pronto`);
 }
 
 function compilarInterface() {
-    passo('Compilando as telas');
+    passo('Compilando a interface');
     rodar('npm', ['run', 'build'], path.join(RAIZ, 'web'));
-    console.log(`${cor.ok('✓')} vitrine e painel compilados`);
+    console.log(`${cor.ok('✓')} interface compilada`);
 }
 
 function conferirResultado() {
-    passo('Conferindo');
-    const faltando = [
-        [path.join(RAIZ, '.env'), 'arquivo de configuração'],
-        [path.join(RAIZ, 'web', 'dist', 'index.html'), 'telas compiladas'],
-        [process.env.DB_PATH || path.join(RAIZ, 'calcados_mariano.db'), 'banco de dados']
-    ].filter(([caminho]) => !fs.existsSync(caminho));
+    passo('Conferindo a instalação');
+    const env = path.join(RAIZ, '.env');
+    const build = path.join(RAIZ, 'web', 'dist', 'index.html');
 
-    if (faltando.length > 0) {
-        console.error(cor.erro('\nA instalação terminou sem produzir:'));
-        for (const [, nome] of faltando) console.error(`  - ${nome}`);
-        process.exit(1);
+    if (!fs.existsSync(env) || !fs.existsSync(build)) {
+        throw new Error('A instalação terminou sem produzir a configuração ou o build.');
     }
+
     console.log(`${cor.ok('✓')} tudo no lugar`);
 }
 
@@ -240,13 +169,7 @@ async function main() {
     prepararBanco();
     compilarInterface();
     conferirResultado();
-
-    const porta = process.env.PORT || '3000';
-    console.log(`\n${cor.ok('Pronto.')} Para subir o sistema:\n`);
-    console.log('  npm start\n');
-    console.log(`Depois abra no navegador:\n`);
-    console.log(`  http://localhost:${porta}         a vitrine`);
-    console.log(`  http://localhost:${porta}/admin   o painel de estoque\n`);
+    console.log(`\n${cor.ok('Pronto.')} Execute:\n\n  npm start\n`);
 }
 
 main().catch((erro) => {

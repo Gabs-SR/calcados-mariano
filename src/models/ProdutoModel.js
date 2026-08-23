@@ -1,44 +1,35 @@
 const db = require('../config/db');
 
-// Tipos de busca aceitos. Cada tipo diz qual coluna consultar e se a comparação é exata.
-// Esta tabela é a única fonte dos nomes de coluna usados na consulta de busca.
-const TIPOS_DE_BUSCA = {
+const TIPOS_DE_BUSCA = Object.freeze({
     nome: { coluna: 'nome', exata: false },
     categoria: { coluna: 'categoria', exata: false },
-    numeracao: { coluna: 'numeracao', exata: true } // Numeração precisa ser exata (ex: 41)
-};
+    numeracao: { coluna: 'numeracao', exata: true }
+});
 
-// Públicos aceitos na coluna publico. A vitrine filtra por igualdade exata contra estes
-// valores, portanto um valor fora da lista deixaria o produto invisível no filtro.
-const PUBLICOS = ['Masculino', 'Feminino', 'Infantil', 'Unissex'];
+const PUBLICOS = Object.freeze(['Masculino', 'Feminino', 'Infantil', 'Unissex']);
 
-// Ordenações aceitas. A chave vem do pedido, e o trecho SQL vem daqui. O nome da coluna
-// nunca é montado com texto do cliente.
-const ORDENACOES = {
-    nome: 'nome_ordenacao ASC',
-    nome_desc: 'nome_ordenacao DESC',
-    quantidade: 'quantidade ASC',
-    quantidade_desc: 'quantidade DESC',
+const ORDENACOES = Object.freeze({
+    nome: 'nome_ordenacao ASC, id ASC',
+    nome_desc: 'nome_ordenacao DESC, id DESC',
+    quantidade: 'quantidade ASC, id ASC',
+    quantidade_desc: 'quantidade DESC, id DESC',
     recentes: 'id DESC'
-};
+});
 
 const ORDENACAO_PADRAO = 'nome';
 const LIMITE_PADRAO = 50;
 const LIMITE_MAXIMO = 100;
 
-// Limite de tamanho dos campos de texto. Evita que um pedido grave megabytes na base.
 const MAX_TEXTO = 200;
 const MAX_DESCRICAO = 1000;
 const MAX_URL = 500;
 
-// Colunas que a escrita cobre. Antes desta lista, o INSERT gravava só 5 das 11 colunas,
-// e um produto cadastrado pela API nascia com publico nulo. Ele então não aparecia em
-// nenhum filtro de público da vitrine, e o dono da loja não tinha como perceber.
 const COLUNAS_GRAVAVEIS = [
     'nome',
     'numeracao',
     'categoria',
     'publico',
+    'subcategoria',
     'quantidade',
     'status_estoque',
     'marca',
@@ -50,19 +41,12 @@ const COLUNAS_GRAVAVEIS = [
 
 const temPropria = (objeto, chave) => Object.prototype.hasOwnProperty.call(objeto, chave);
 
-// Tira acento e passa para minúscula. Serve só para ordenar.
-//
-// O SQLite não tem colação por idioma: COLLATE NOCASE dobra apenas ASCII. Sem isto,
-// 'Sapatênis' viria depois de 'Sapato', porque o ponto de código de 'ê' é maior que o de
-// 'o'. Em um catálogo em português quase todo nome tem acento.
 const chaveDeOrdenacao = (texto) =>
     texto
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase();
 
-// Marca o erro como falha de validação. O controller usa essa marca para responder 400.
-// A propriedade 'erros' carrega a lista completa, para o cliente corrigir tudo de uma vez.
 const erroDeValidacao = (mensagem, erros) => {
     const erro = new Error(mensagem);
     erro.validacao = true;
@@ -70,22 +54,17 @@ const erroDeValidacao = (mensagem, erros) => {
     return erro;
 };
 
-// Marca o erro como recurso ausente. O controller traduz para 404.
 const erroNaoEncontrado = (mensagem) => {
     const erro = new Error(mensagem);
     erro.naoEncontrado = true;
     return erro;
 };
 
-// A vitrine põe este valor no atributo src de uma imagem. Sem esta checagem, um
-// 'javascript:...' gravado no campo viraria execução de script na página do cliente.
 const imagemUrlAceita = (valor) =>
     valor.startsWith('/') || valor.startsWith('http://') || valor.startsWith('https://');
 
 const textoLimpo = (valor) => (typeof valor === 'string' ? valor.trim() : valor);
 
-// Confere um produto que chegou pelo POST ou pelo PUT.
-// Devolve a lista de problemas. Uma lista vazia significa que o produto pode ser gravado.
 const validarProduto = (produto) => {
     if (produto === null || typeof produto !== 'object' || Array.isArray(produto)) {
         return ['O corpo do pedido precisa ser um objeto JSON.'];
@@ -102,7 +81,6 @@ const validarProduto = (produto) => {
         }
     }
 
-    // O público define em qual filtro da vitrine o produto aparece.
     if (typeof produto.publico !== 'string' || !PUBLICOS.includes(produto.publico.trim())) {
         erros.push(
             `O campo "publico" é obrigatório e precisa ser um destes: ${PUBLICOS.join(', ')}.`
@@ -115,8 +93,8 @@ const validarProduto = (produto) => {
         erros.push('O campo "quantidade" não pode ser negativo.');
     }
 
-    // Opcionais. Quando vêm, precisam ser texto dentro do limite.
     for (const [campo, limite] of [
+        ['subcategoria', MAX_TEXTO],
         ['status_estoque', MAX_TEXTO],
         ['marca', MAX_TEXTO],
         ['cor', MAX_TEXTO],
@@ -132,15 +110,19 @@ const validarProduto = (produto) => {
         }
     }
 
-    const imagem = produto.imagem_url;
-    if (typeof imagem === 'string' && imagem.trim() !== '' && !imagemUrlAceita(imagem.trim())) {
+    const imagem = textoLimpo(produto.imagem_url);
+    if (imagem && !imagemUrlAceita(imagem)) {
         erros.push('O campo "imagem_url" precisa começar com "/", "http://" ou "https://".');
     }
 
     return erros;
 };
 
-// Monta os valores na ordem de COLUNAS_GRAVAVEIS, com trim e com o status derivado.
+const opcional = (valor) => {
+    const limpo = textoLimpo(valor);
+    return limpo === undefined || limpo === '' ? null : limpo;
+};
+
 const valoresParaGravar = (produto) => {
     const quantidade = produto.quantidade;
     const status =
@@ -150,56 +132,45 @@ const valoresParaGravar = (produto) => {
               ? 'Em estoque'
               : 'Sem estoque';
 
-    const opcional = (valor) => {
-        const limpo = textoLimpo(valor);
-        return limpo === undefined || limpo === '' ? null : limpo;
-    };
+    const nome = produto.nome.trim();
 
     return [
-        produto.nome.trim(),
+        nome,
         produto.numeracao.trim(),
         produto.categoria.trim(),
         produto.publico.trim(),
+        opcional(produto.subcategoria),
         quantidade,
         status,
         opcional(produto.marca),
         opcional(produto.cor),
         opcional(produto.descricao),
         opcional(produto.imagem_url),
-        chaveDeOrdenacao(produto.nome.trim())
+        chaveDeOrdenacao(nome)
     ];
 };
 
-// Confere os parâmetros de listagem e devolve a consulta já montada.
-const montarListagem = (filtros) => {
+const montarListagem = (filtros = {}) => {
     const erros = [];
     const condicoes = [];
     const parametros = [];
 
-    const { publico, categoria } = filtros;
-
-    if (publico !== undefined && publico !== '') {
-        if (!PUBLICOS.includes(publico)) {
+    if (filtros.publico !== undefined && filtros.publico !== '') {
+        if (!PUBLICOS.includes(filtros.publico)) {
             erros.push(`O parâmetro "publico" precisa ser um destes: ${PUBLICOS.join(', ')}.`);
         } else {
-            condicoes.push('publico = ?');
-            parametros.push(publico);
+            parametros.push(filtros.publico);
+            condicoes.push(`publico = $${parametros.length}`);
         }
     }
 
-    if (categoria !== undefined && categoria !== '') {
-        condicoes.push('categoria = ?');
-        parametros.push(categoria);
+    if (filtros.categoria !== undefined && filtros.categoria !== '') {
+        parametros.push(filtros.categoria);
+        condicoes.push(`categoria = $${parametros.length}`);
     }
 
-    const chaveOrdenacao =
-        filtros.ordenar === undefined || filtros.ordenar === ''
-            ? ORDENACAO_PADRAO
-            : filtros.ordenar;
-
+    const chaveOrdenacao = filtros.ordenar || ORDENACAO_PADRAO;
     if (!temPropria(ORDENACOES, chaveOrdenacao)) {
-        // Um valor fora da lista responde 400 em vez de cair no padrão em silêncio.
-        // Cair no padrão faria a tela mostrar outra ordem sem avisar ninguém.
         erros.push(
             `O parâmetro "ordenar" precisa ser um destes: ${Object.keys(ORDENACOES).join(', ')}.`
         );
@@ -224,172 +195,153 @@ const montarListagem = (filtros) => {
 
     if (erros.length > 0) return { erros };
 
-    const onde = condicoes.length > 0 ? ` WHERE ${condicoes.join(' AND ')}` : '';
+    const onde = condicoes.length ? ` WHERE ${condicoes.join(' AND ')}` : '';
+    const offset = (pagina - 1) * limite;
 
     return {
         erros: [],
         pagina,
         limite,
-        sqlTotal: `SELECT COUNT(*) AS total FROM produtos${onde}`,
-        sqlPagina: `SELECT * FROM produtos${onde} ORDER BY ${ORDENACOES[chaveOrdenacao]} LIMIT ? OFFSET ?`,
         parametros,
-        parametrosPagina: [...parametros, limite, (pagina - 1) * limite]
+        parametrosPagina: [...parametros, limite, offset],
+        sqlTotal: `SELECT COUNT(*)::integer AS total FROM produtos${onde}`,
+        sqlPagina: `SELECT * FROM produtos${onde} ORDER BY ${ORDENACOES[chaveOrdenacao]} LIMIT $${parametros.length + 1} OFFSET $${parametros.length + 2}`
     };
 };
 
-// Confere que o id do caminho é um inteiro positivo. '3x' e '-1' não são.
 const idValido = (id) => /^[1-9][0-9]*$/.test(String(id));
 
 const ProdutoModel = {
-    // 1. Lista com filtro, ordenação e paginação.
-    listar: (filtros, callback) => {
-        const consulta = montarListagem(filtros || {});
-
-        if (consulta.erros.length > 0) {
-            return callback(
-                erroDeValidacao(
-                    'Os parâmetros da listagem não passaram na validação.',
-                    consulta.erros
-                )
+    async listar(filtros = {}) {
+        const consulta = montarListagem(filtros);
+        if (consulta.erros.length) {
+            throw erroDeValidacao(
+                'Os parâmetros da listagem não passaram na validação.',
+                consulta.erros
             );
         }
 
-        db.get(consulta.sqlTotal, consulta.parametros, (erro, contagem) => {
-            if (erro) return callback(erro);
+        const contagem = await db.buscarUm(consulta.sqlTotal, consulta.parametros);
+        const produtos = await db.buscarTodos(consulta.sqlPagina, consulta.parametrosPagina);
+        const total = Number(contagem.total);
 
-            db.all(consulta.sqlPagina, consulta.parametrosPagina, (erro, produtos) => {
-                if (erro) return callback(erro);
-
-                const total = contagem.total;
-                callback(null, {
-                    produtos,
-                    total,
-                    pagina: consulta.pagina,
-                    limite: consulta.limite,
-                    paginas: total === 0 ? 0 : Math.ceil(total / consulta.limite)
-                });
-            });
-        });
+        return {
+            produtos,
+            total,
+            pagina: consulta.pagina,
+            limite: consulta.limite,
+            paginas: total === 0 ? 0 : Math.ceil(total / consulta.limite)
+        };
     },
 
-    // 2. Um produto pelo id. A vitrine usa isto no modal e no link direto.
-    porId: (id, callback) => {
+    async porId(id) {
         if (!idValido(id)) {
-            return callback(erroDeValidacao('O id precisa ser um número inteiro a partir de 1.'));
+            throw erroDeValidacao('O id precisa ser um número inteiro a partir de 1.');
         }
 
-        db.get('SELECT * FROM produtos WHERE id = ?', [Number(id)], (erro, produto) => {
-            if (erro) return callback(erro);
-            if (!produto) return callback(erroNaoEncontrado('Produto não encontrado.'));
-            callback(null, produto);
-        });
+        const produto = await db.buscarUm('SELECT * FROM produtos WHERE id = $1', [Number(id)]);
+        if (!produto) throw erroNaoEncontrado('Produto não encontrado.');
+        return produto;
     },
 
-    // 3. Adiciona um produto, cobrindo as colunas todas.
-    adicionar: (produto, callback) => {
-        // A validação vem antes do banco. Sem ela, o controller repassava req.body direto
-        // e qualquer pedido gravava uma linha, inclusive com campos nulos ou tipos errados.
+    async adicionar(produto) {
         const erros = validarProduto(produto);
-        if (erros.length > 0) {
-            return callback(erroDeValidacao('O produto enviado não passou na validação.', erros));
+        if (erros.length) {
+            throw erroDeValidacao('O produto enviado não passou na validação.', erros);
         }
 
-        const marcadores = COLUNAS_GRAVAVEIS.map(() => '?').join(', ');
-        const sql = `INSERT INTO produtos (${COLUNAS_GRAVAVEIS.join(', ')}) VALUES (${marcadores})`;
+        const placeholders = COLUNAS_GRAVAVEIS.map((_, indice) => `$${indice + 1}`).join(', ');
+        const resultado = await db.query(
+            `INSERT INTO produtos (${COLUNAS_GRAVAVEIS.join(', ')}) VALUES (${placeholders}) RETURNING id`,
+            valoresParaGravar(produto)
+        );
 
-        // db.run usado para modificar o banco (inserir, atualizar, apagar)
-        db.run(sql, valoresParaGravar(produto), function (erro) {
-            if (erro) return callback(erro);
-            callback(null, { id: this.lastID });
-        });
+        return { id: resultado.rows[0].id };
     },
 
-    // 4. Substitui um produto inteiro. O painel usa isto para corrigir um cadastro.
-    atualizar: (id, produto, callback) => {
+    async atualizar(id, produto) {
         if (!idValido(id)) {
-            return callback(erroDeValidacao('O id precisa ser um número inteiro a partir de 1.'));
+            throw erroDeValidacao('O id precisa ser um número inteiro a partir de 1.');
         }
 
         const erros = validarProduto(produto);
-        if (erros.length > 0) {
-            return callback(erroDeValidacao('O produto enviado não passou na validação.', erros));
+        if (erros.length) {
+            throw erroDeValidacao('O produto enviado não passou na validação.', erros);
         }
 
-        const atribuicoes = COLUNAS_GRAVAVEIS.map((coluna) => `${coluna} = ?`).join(', ');
-        const sql = `UPDATE produtos SET ${atribuicoes} WHERE id = ?`;
+        const atribuicoes = COLUNAS_GRAVAVEIS.map(
+            (coluna, indice) => `${coluna} = $${indice + 1}`
+        ).join(', ');
 
-        db.run(sql, [...valoresParaGravar(produto), Number(id)], function (erro) {
-            if (erro) return callback(erro);
-            if (this.changes === 0) return callback(erroNaoEncontrado('Produto não encontrado.'));
-            callback(null, { id: Number(id) });
-        });
+        const resultado = await db.query(
+            `UPDATE produtos SET ${atribuicoes} WHERE id = $${COLUNAS_GRAVAVEIS.length + 1} RETURNING id`,
+            [...valoresParaGravar(produto), Number(id)]
+        );
+
+        if (!resultado.rows[0]) throw erroNaoEncontrado('Produto não encontrado.');
+        return { id: resultado.rows[0].id };
     },
 
-    // 5. Remove um produto.
-    remover: (id, callback) => {
+    async remover(id) {
         if (!idValido(id)) {
-            return callback(erroDeValidacao('O id precisa ser um número inteiro a partir de 1.'));
+            throw erroDeValidacao('O id precisa ser um número inteiro a partir de 1.');
         }
 
-        db.run('DELETE FROM produtos WHERE id = ?', [Number(id)], function (erro) {
-            if (erro) return callback(erro);
-            if (this.changes === 0) return callback(erroNaoEncontrado('Produto não encontrado.'));
-            callback(null, { id: Number(id) });
-        });
+        const resultado = await db.query(
+            'DELETE FROM produtos WHERE id = $1 RETURNING id',
+            [Number(id)]
+        );
+
+        if (!resultado.rows[0]) throw erroNaoEncontrado('Produto não encontrado.');
+        return { id: resultado.rows[0].id };
     },
 
-    // 6. As opções de filtro, lidas do banco. A vitrine monta o menu com isto, em vez de
-    // repetir uma lista fixa no código que sai de sincronia com os dados.
-    opcoesDeFiltro: (callback) => {
-        const distintos = (coluna) =>
-            new Promise((ok, falha) => {
-                const sql = `SELECT DISTINCT ${coluna} AS valor FROM produtos WHERE ${coluna} IS NOT NULL AND ${coluna} <> '' ORDER BY ${coluna} COLLATE NOCASE`;
-                db.all(sql, [], (erro, linhas) =>
-                    erro ? falha(erro) : ok(linhas.map((l) => l.valor))
-                );
-            });
+    async opcoesDeFiltro() {
+        const [categorias, publicos] = await Promise.all([
+            db.buscarTodos(
+                `SELECT DISTINCT categoria AS valor
+                 FROM produtos
+                 WHERE categoria IS NOT NULL AND categoria <> ''
+                 ORDER BY categoria ASC`
+            ),
+            db.buscarTodos(
+                `SELECT DISTINCT publico AS valor
+                 FROM produtos
+                 WHERE publico IS NOT NULL AND publico <> ''
+                 ORDER BY publico ASC`
+            )
+        ]);
 
-        Promise.all([distintos('categoria'), distintos('publico')])
-            .then(([categorias, publicos]) => callback(null, { categorias, publicos }))
-            .catch(callback);
+        return {
+            categorias: categorias.map((linha) => linha.valor),
+            publicos: publicos.map((linha) => linha.valor)
+        };
     },
 
-    // 7. Pesquisar por nome, categoria ou numeração
-    buscar: (termo, tipo, callback) => {
-        // hasOwnProperty evita que nomes herdados de Object, como 'constructor',
-        // passem por tipo válido.
+    async buscar(termo, tipo) {
         const tipoValido = typeof tipo === 'string' && temPropria(TIPOS_DE_BUSCA, tipo);
-
-        // Sem um tipo válido não existe consulta para montar. Esta função antes deixava
-        // a consulta vazia e chamava db.all(''), e o driver sqlite3 derrubava o processo
-        // com segmentation fault. Nunca monte a consulta fora desta tabela.
         if (!tipoValido) {
-            const aceitos = Object.keys(TIPOS_DE_BUSCA).join(', ');
-            return callback(
-                erroDeValidacao(
-                    `O parâmetro "tipo" é obrigatório e precisa ser um destes: ${aceitos}.`
-                )
+            throw erroDeValidacao(
+                `O parâmetro "tipo" é obrigatório e precisa ser um destes: ${Object.keys(TIPOS_DE_BUSCA).join(', ')}.`
             );
         }
 
         if (typeof termo !== 'string' || termo.trim() === '') {
-            return callback(erroDeValidacao('O parâmetro "termo" é obrigatório.'));
+            throw erroDeValidacao('O parâmetro "termo" é obrigatório.');
         }
 
         const busca = TIPOS_DE_BUSCA[tipo];
-        const comparacao = busca.exata ? '=' : 'LIKE';
+        const valor = busca.exata ? termo.trim() : `%${termo.trim()}%`;
+        const operador = busca.exata ? '=' : 'ILIKE';
 
-        // O nome da coluna vem da tabela acima, nunca do pedido, portanto a interpolação
-        // é segura. O valor procurado continua como parâmetro do driver.
-        const sql = `SELECT * FROM produtos WHERE ${busca.coluna} ${comparacao} ?`;
-        const valor = busca.exata ? termo : '%' + termo + '%'; // O % acha palavras parecidas
-
-        db.all(sql, [valor], callback);
+        return db.buscarTodos(
+            `SELECT * FROM produtos WHERE ${busca.coluna} ${operador} $1 ORDER BY nome_ordenacao ASC, id ASC`,
+            [valor]
+        );
     },
 
-    // Mantida para os testes e para quem só quer tudo, sem paginar.
-    listarTodos: (callback) => {
-        db.all('SELECT * FROM produtos ORDER BY id', [], callback);
+    async listarTodos() {
+        return db.buscarTodos('SELECT * FROM produtos ORDER BY id ASC');
     }
 };
 

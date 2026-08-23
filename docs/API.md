@@ -1,184 +1,207 @@
 # Referência da API
 
-Esta é a parte técnica, para quem mantém o sistema. Quem só usa não precisa
-dela — o guia de uso está no [README](../README.md).
+A API é um backend Express que usa PostgreSQL/Supabase como fonte de verdade do catálogo.
+A vitrine faz apenas leitura pública; as operações de estoque exigem sessão do painel.
 
-## API
+## Banco e configuração
 
-O servidor escuta em `http://localhost:3000`. Todas as respostas usam JSON, com uma exceção: a rota raiz devolve texto puro.
-
-### `GET /`
-
-Confirma que o servidor está no ar. Devolve texto puro, não JSON.
+A conexão é definida por `DATABASE_URL` no ambiente. A aplicação não cria tabelas ao iniciar.
+Para preparar um banco novo ou migrar uma tabela existente, use:
 
 ```bash
-curl http://localhost:3000/
+npm run db:setup
 ```
 
-```
-Servidor da Calçados Mariano rodando com sucesso!
-```
+O schema de referência está em `db/schema.sql` e os índices em `db/indexes.sql`.
 
-Esta rota não verifica o banco de dados. Ela responde `200` mesmo quando o banco falha. Para monitoramento, use `GET /health`.
+## `GET /`
 
-### `GET /health`
+Confirma que a API está no ar. Não verifica o banco.
 
-Diz se o servidor **e o banco** estão em condições de atender. Use esta rota em monitoramento e em smoke tests.
-
-```bash
-curl http://localhost:3000/health
+```text
+Calçados Mariano API
 ```
 
-```json
-{ "status": "ok", "banco": "conectado", "produtos": 13 }
-```
+## `GET /health`
 
-Quando o banco não responde:
+Verifica a tabela `produtos` diretamente no PostgreSQL.
 
 ```json
 {
-  "status": "indisponivel",
-  "banco": "sem resposta",
-  "mensagem": "SQLITE_ERROR: no such table: produtos"
+  "status": "ok",
+  "banco": "conectado",
+  "produtos": 13
 }
 ```
 
-| Resposta | Quando                                                           |
-| -------- | ---------------------------------------------------------------- |
-| `200`    | O banco respondeu. O campo `produtos` traz a contagem de linhas. |
-| `503`    | O banco não respondeu, ou a tabela `produtos` não existe.        |
+Se o banco não responder, a API devolve `503` sem expor detalhes internos do PostgreSQL.
 
-A verificação consulta a tabela `produtos` de propósito. Uma consulta como `SELECT 1` provaria só que a conexão abriu. O driver `sqlite3` cria um arquivo vazio quando o banco não existe, portanto `SELECT 1` passaria em um clone onde ninguém rodou `npm run db:setup`.
+## `GET /produtos`
 
-### `GET /produtos`
+Lista produtos com filtro, ordenação e paginação.
 
-Lista todos os produtos da tabela.
+Parâmetros opcionais:
+
+| Parâmetro | Valores |
+| --- | --- |
+| `publico` | `Masculino`, `Feminino`, `Infantil`, `Unissex` |
+| `categoria` | categoria exata |
+| `ordenar` | `nome`, `nome_desc`, `quantidade`, `quantidade_desc`, `recentes` |
+| `pagina` | inteiro a partir de 1 |
+| `limite` | inteiro de 1 a 100; padrão 50 |
+
+Exemplo:
 
 ```bash
-curl http://localhost:3000/produtos
+curl "http://localhost:3000/produtos?publico=Masculino&ordenar=nome&pagina=1&limite=20"
 ```
+
+Resposta:
 
 ```json
-[
-  {
-    "id": 2,
-    "nome": "Sapato Social Preto",
-    "numeracao": "40",
-    "categoria": "Sapato",
-    "subcategoria": null,
-    "quantidade": 15,
-    "status_estoque": "Em estoque",
-    "marca": null,
-    "cor": null,
-    "descricao": null
-  }
-]
+{
+  "produtos": [
+    {
+      "id": 2,
+      "nome": "Sapato Social Preto",
+      "numeracao": "40",
+      "categoria": "Sapato social",
+      "publico": "Masculino",
+      "subcategoria": null,
+      "quantidade": 15,
+      "status_estoque": "Em estoque",
+      "marca": "Mariano",
+      "cor": "Preto",
+      "descricao": "Sapato social de couro.",
+      "imagem_url": null,
+      "nome_ordenacao": "sapato social preto"
+    }
+  ],
+  "total": 1,
+  "pagina": 1,
+  "limite": 20,
+  "paginas": 1
+}
 ```
 
-| Resposta | Quando                                                   |
-| -------- | -------------------------------------------------------- |
-| `200`    | A consulta funcionou. O corpo traz um array de produtos. |
-| `500`    | O banco de dados falhou.                                 |
+A vitrine usa esse envelope para saber quantos produtos existem sem carregar o catálogo inteiro em cada requisição.
 
-### `GET /produtos/buscar`
+## `GET /produtos/buscar`
 
-Busca produtos por um campo. A rota exige dois parâmetros de query.
+Busca por nome, categoria ou numeração.
 
-| Parâmetro | Obrigatório | Valores aceitos                  | O que faz                                                                                 |
-| --------- | ----------- | -------------------------------- | ----------------------------------------------------------------------------------------- |
-| `tipo`    | Sim         | `nome`, `categoria`, `numeracao` | Escolhe a coluna da busca.                                                                |
-| `termo`   | Sim         | Texto livre                      | O valor procurado. Busca parcial para `nome` e `categoria`. Busca exata para `numeracao`. |
+| Parâmetro | Obrigatório | Comportamento |
+| --- | --- | --- |
+| `tipo` | sim | `nome`, `categoria` ou `numeracao` |
+| `termo` | sim | busca parcial em nome/categoria; exata em numeração |
 
 ```bash
 curl "http://localhost:3000/produtos/buscar?tipo=nome&termo=bota"
 ```
 
-```json
-[
-  {
-    "id": 3,
-    "nome": "Bota Texana Bico Quadrado",
-    "numeracao": "41",
-    "categoria": "Bota (texana)",
-    "quantidade": 8,
-    "status_estoque": "Em estoque"
-  }
-]
-```
+A busca por texto usa `ILIKE` parametrizado no PostgreSQL. Valores fornecidos pelo cliente nunca são concatenados no SQL.
 
-A rota rejeita um pedido incompleto com `400` e uma mensagem que diz o que falta:
+## `GET /produtos/categorias`
 
-```bash
-curl "http://localhost:3000/produtos/buscar?termo=41"
-```
+Retorna os valores existentes no banco para montar os filtros da vitrine.
 
 ```json
 {
-  "mensagem": "O parâmetro \"tipo\" é obrigatório e precisa ser um destes: nome, categoria, numeracao."
+  "categorias": ["Bota", "Sandália", "Sapato social"],
+  "publicos": ["Feminino", "Masculino", "Unissex"]
 }
 ```
 
-| Resposta | Quando                                                                                |
-| -------- | ------------------------------------------------------------------------------------- |
-| `200`    | A busca funcionou. O corpo traz um array, que pode vir vazio.                         |
-| `400`    | O pedido não trouxe `tipo`, ou trouxe um `tipo` fora da lista, ou não trouxe `termo`. |
-| `500`    | O banco de dados falhou.                                                              |
+## `GET /produtos/:id`
 
-> **Histórico.** Até a correção do item P0-1, um pedido sem `tipo` derrubava o processo do servidor com segmentation fault e código de saída 139. O modelo montava uma consulta SQL vazia e o driver `sqlite3` falhava em código nativo. A rota agora valida os dois parâmetros antes de chegar ao banco.
-
-### `POST /produtos`
-
-Cadastra um produto novo.
+Retorna um único produto.
 
 ```bash
-curl -X POST http://localhost:3000/produtos \
-  -H "Content-Type: application/json" \
-  -d '{
-    "nome": "Tênis Casual Azul",
-    "categoria": "Tênis",
-    "quantidade": 10,
-    "status_estoque": "Em estoque",
-    "numeracao": "42"
-  }'
+curl http://localhost:3000/produtos/2
 ```
+
+Retorna `404` se o produto não existir e `400` se o identificador não for um inteiro positivo.
+
+## `POST /produtos`
+
+Cria um produto. Requer sessão do painel.
 
 ```json
-{ "mensagem": "Produto adicionado com sucesso!" }
+{
+  "nome": "Tênis Casual Azul",
+  "numeracao": "42",
+  "categoria": "Tênis",
+  "publico": "Masculino",
+  "subcategoria": "Casual",
+  "quantidade": 10,
+  "marca": "Mariano",
+  "cor": "Azul",
+  "descricao": "Tênis casual para uso diário.",
+  "imagem_url": "/imagens/tenis-azul.jpg"
+}
 ```
 
-| Campo            | Tipo   | Coluna           |
-| ---------------- | ------ | ---------------- |
-| `nome`           | texto  | `nome`           |
-| `categoria`      | texto  | `categoria`      |
-| `quantidade`     | número | `quantidade`     |
-| `status_estoque` | texto  | `status_estoque` |
-| `numeracao`      | texto  | `numeracao`      |
+`status_estoque` é opcional. Quando omitido, o backend deriva `Em estoque` para quantidade maior que zero e `Sem estoque` para zero.
 
-| Resposta | Quando                       |
-| -------- | ---------------------------- |
-| `201`    | O servidor gravou o produto. |
-| `500`    | A gravação falhou.           |
+Resposta:
 
-> **Atenção:** esta rota não valida a entrada e não pede autenticação. O CORS aceita qualquer origem. Qualquer pessoa com acesso à rede grava linhas na tabela. Não exponha este servidor na internet no estado atual.
-
-### Esquema da tabela `produtos`
-
-```sql
-CREATE TABLE "produtos" (
-  "id"             INTEGER,
-  "nome"           TEXT,
-  "numeracao"      TEXT,
-  "categoria"      TEXT,
-  "subcategoria"   TEXT,
-  "quantidade"     INTEGER,
-  "status_estoque" TEXT,
-  "marca"          TEXT,
-  "cor"            TEXT,
-  "descricao"      TEXT,
-  PRIMARY KEY("id")
-);
+```json
+{
+  "mensagem": "Produto adicionado com sucesso!",
+  "id": 18
+}
 ```
 
-A rota `POST /produtos` grava cinco das dez colunas. As colunas `subcategoria`, `marca`, `cor` e `descricao` ficam nulas em todas as 13 linhas atuais. A tabela não tem coluna de preço e não tem coluna de imagem.
+## `PUT /produtos/:id`
 
----
+Substitui os dados do produto inteiro. Requer sessão.
+
+## `DELETE /produtos/:id`
+
+Remove um produto. Requer sessão.
+
+## Autenticação
+
+### `POST /auth/login`
+
+Recebe:
+
+```json
+{ "senha": "senha-do-painel" }
+```
+
+Quando a senha está correta, a API cria um cookie `sessao_mariano` com `HttpOnly`. O hash da senha fica em `ADMIN_SENHA_HASH`; a senha em texto não é armazenada.
+
+### `POST /auth/logout`
+
+Invalida o cookie de sessão.
+
+### `GET /auth/sessao`
+
+Retorna se existe uma sessão válida e se a autenticação está configurada.
+
+## Segurança das escritas
+
+As rotas `POST`, `PUT` e `DELETE` passam por `exigirAutenticacao`. A vitrine não precisa de login para consultar produtos.
+
+Os valores de entrada usados em SQL são sempre parâmetros PostgreSQL (`$1`, `$2`, ...). Nomes de colunas e expressões de ordenação usados dinamicamente vêm apenas de listas internas de valores permitidos.
+
+## Schema de `produtos`
+
+A tabela contém:
+
+- `id`
+- `nome`
+- `numeracao`
+- `categoria`
+- `publico`
+- `subcategoria`
+- `quantidade`
+- `status_estoque`
+- `marca`
+- `cor`
+- `descricao`
+- `imagem_url`
+- `nome_ordenacao`
+
+Não existe coluna de preço no modelo atual da vitrine.

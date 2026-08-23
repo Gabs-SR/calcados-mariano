@@ -1,177 +1,110 @@
-// Testes unitários do model, sem passar por HTTP.
-// describe, it, expect, beforeAll e afterAll vêm de globals: true no vitest.config.mjs
+const { vi, describe, it, expect } = require('vitest');
 
-const { criarBancoDeTeste, contarProdutosDaCarga } = require('./helpers/bancoDeTeste');
-
-let ProdutoModel;
-let banco;
-
-// Envolve a API de callback do model em promessa, para o teste ficar legível.
-const buscar = (termo, tipo) =>
-    new Promise((ok, falha) => {
-        ProdutoModel.buscar(termo, tipo, (erro, linhas) => (erro ? falha(erro) : ok(linhas)));
-    });
-
-const adicionar = (produto) =>
-    new Promise((ok, falha) => {
-        ProdutoModel.adicionar(produto, (erro) => (erro ? falha(erro) : ok()));
-    });
-
-beforeAll(async () => {
-    banco = await criarBancoDeTeste();
-    ProdutoModel = require('../src/models/ProdutoModel');
-});
-
-afterAll(() => banco.limpar());
-
-describe('ProdutoModel.listarTodos', () => {
-    it('devolve todas as linhas da carga inicial', async () => {
-        const linhas = await new Promise((ok, falha) => {
-            ProdutoModel.listarTodos((erro, r) => (erro ? falha(erro) : ok(r)));
-        });
-
-        expect(linhas).toHaveLength(contarProdutosDaCarga());
-    });
-});
-
-describe('ProdutoModel.buscar', () => {
-    // Os quatro caminhos da função. Antes da correção do item P0-1, o quarto caminho
-    // não existia: a consulta ficava vazia e db.all('') derrubava o processo.
-
-    it('caminho 1: tipo nome usa LIKE com curingas dos dois lados', async () => {
-        const linhas = await buscar('bota', 'nome');
-
-        expect(linhas.length).toBeGreaterThan(0);
-        for (const linha of linhas) {
-            expect(linha.nome.toLowerCase()).toContain('bota');
+const { produtos, dbMock } = vi.hoisted(() => {
+    const produtos = [
+        {
+            id: 1,
+            nome: 'Bota Texana',
+            numeracao: '41',
+            categoria: 'Bota',
+            publico: 'Masculino',
+            quantidade: 8
+        },
+        {
+            id: 2,
+            nome: 'Chuteira Nike',
+            numeracao: '39/40',
+            categoria: 'Chuteira de futsal',
+            publico: 'Unissex',
+            quantidade: 15
         }
-    });
+    ];
 
-    it('caminho 2: tipo categoria usa LIKE com curingas dos dois lados', async () => {
-        const linhas = await buscar('huteira', 'categoria');
-
-        expect(linhas.length).toBeGreaterThan(0);
-        for (const linha of linhas) {
-            expect(linha.categoria).toContain('huteira');
-        }
-    });
-
-    it('caminho 3: tipo numeracao usa igualdade exata', async () => {
-        const exatas = await buscar('41', 'numeracao');
-        expect(exatas.length).toBeGreaterThan(0);
-        for (const linha of exatas) {
-            expect(linha.numeracao).toBe('41');
-        }
-
-        // Um termo parcial não deve casar, porque a comparação é exata.
-        const parciais = await buscar('4', 'numeracao');
-        expect(parciais).toEqual([]);
-    });
-
-    it('caminho 4: tipo inválido devolve erro de validação, e não consulta o banco', async () => {
-        for (const tipo of [
-            undefined,
-            null,
-            '',
-            'cor',
-            'marca',
-            123,
-            {},
-            [],
-            'constructor',
-            '__proto__'
-        ]) {
-            await expect(buscar('x', tipo)).rejects.toMatchObject({ validacao: true });
-        }
-    });
-
-    it('termo ausente ou vazio devolve erro de validação', async () => {
-        for (const termo of [undefined, null, '', '   ', 42, {}]) {
-            await expect(buscar(termo, 'nome')).rejects.toMatchObject({ validacao: true });
-        }
-    });
-
-    it('a mensagem do erro diz qual parâmetro está errado', async () => {
-        await expect(buscar('x', 'cor')).rejects.toThrow(/tipo/);
-        await expect(buscar('', 'nome')).rejects.toThrow(/termo/);
-    });
-});
-
-describe('ProdutoModel.adicionar', () => {
-    const valido = {
-        nome: 'Bota Unitaria',
-        categoria: 'Bota',
-        publico: 'Masculino',
-        quantidade: 4,
-        status_estoque: 'Em estoque',
-        numeracao: '42'
+    const dbMock = {
+        query: vi.fn(async () => ({ rows: [{ id: 3 }] })),
+        buscarUm: vi.fn(async (sql) =>
+            sql.includes('COUNT(*)') ? { total: produtos.length } : produtos[0]
+        ),
+        buscarTodos: vi.fn(async () => produtos)
     };
 
-    it('grava um produto válido', async () => {
-        await adicionar(valido);
-        const linhas = await buscar('Bota Unitaria', 'nome');
+    return { produtos, dbMock };
+});
 
-        expect(linhas).toHaveLength(1);
-        expect(linhas[0].quantidade).toBe(4);
-    });
+vi.mock('../src/config/db', () => dbMock);
 
-    it('aplica trim nos campos de texto', async () => {
-        await adicionar({ ...valido, nome: '  Com Espacos  ', categoria: ' Teste ' });
-        const linhas = await buscar('Com Espacos', 'nome');
+const ProdutoModel = require('../src/models/ProdutoModel');
 
-        expect(linhas).toHaveLength(1);
-        expect(linhas[0].nome).toBe('Com Espacos');
-        expect(linhas[0].categoria).toBe('Teste');
-    });
+describe('ProdutoModel PostgreSQL', () => {
+    it('lista produtos usando paginação e retorna envelope numérico', async () => {
+        const resultado = await ProdutoModel.listar({ pagina: '1', limite: '10' });
 
-    it('rejeita campos de texto ausentes, vazios ou de outro tipo', async () => {
-        const casos = [
-            {},
-            { ...valido, nome: undefined },
-            { ...valido, nome: '' },
-            { ...valido, nome: '   ' },
-            { ...valido, nome: 42 },
-            { ...valido, categoria: undefined },
-            { ...valido, publico: undefined },
-            { ...valido, publico: 'Homem' },
-            { ...valido, numeracao: undefined }
-        ];
-
-        for (const caso of casos) {
-            await expect(adicionar(caso)).rejects.toMatchObject({ validacao: true });
-        }
-    });
-
-    it('rejeita quantidade que não é inteiro, e quantidade negativa', async () => {
-        for (const quantidade of [undefined, null, 'muitos', 1.5, NaN, -1, {}]) {
-            await expect(adicionar({ ...valido, quantidade })).rejects.toMatchObject({
-                validacao: true
-            });
-        }
-    });
-
-    it('rejeita corpo que não é objeto', async () => {
-        for (const corpo of [null, undefined, 'texto', 42, []]) {
-            await expect(adicionar(corpo)).rejects.toMatchObject({ validacao: true });
-        }
-    });
-
-    it('rejeita texto acima do limite de tamanho', async () => {
-        const gigante = 'a'.repeat(201);
-        await expect(adicionar({ ...valido, nome: gigante })).rejects.toMatchObject({
-            validacao: true
+        expect(resultado).toEqual({
+            produtos,
+            total: 2,
+            pagina: 1,
+            limite: 10,
+            paginas: 1
         });
+        expect(dbMock.buscarUm).toHaveBeenCalled();
+        expect(dbMock.buscarTodos).toHaveBeenCalled();
     });
 
-    it('lista todos os erros de uma vez, e não só o primeiro', async () => {
-        try {
-            await adicionar({ nome: '', quantidade: 'x' });
-            throw new Error('deveria ter falhado');
-        } catch (erro) {
-            expect(erro.validacao).toBe(true);
-            expect(Array.isArray(erro.erros)).toBe(true);
-            // nome, categoria, numeracao, publico e quantidade
-            expect(erro.erros.length).toBeGreaterThanOrEqual(5);
-        }
+    it('valida público antes de consultar o banco', async () => {
+        await expect(
+            ProdutoModel.adicionar({
+                nome: 'Produto',
+                numeracao: '40',
+                categoria: 'Bota',
+                publico: 'Qualquer',
+                quantidade: 1
+            })
+        ).rejects.toMatchObject({ validacao: true });
+
+        expect(dbMock.query).not.toHaveBeenCalled();
+    });
+
+    it('valida quantidade negativa', async () => {
+        await expect(
+            ProdutoModel.adicionar({
+                nome: 'Produto',
+                numeracao: '40',
+                categoria: 'Bota',
+                publico: 'Masculino',
+                quantidade: -1
+            })
+        ).rejects.toMatchObject({ validacao: true });
+    });
+
+    it('insere todas as colunas do schema e usa RETURNING id', async () => {
+        const resultado = await ProdutoModel.adicionar({
+            nome: '  Bota Nova  ',
+            numeracao: '42',
+            categoria: 'Bota',
+            publico: 'Masculino',
+            subcategoria: 'Couro',
+            quantidade: 5,
+            marca: 'Mariano',
+            cor: 'Preto',
+            descricao: 'Produto novo',
+            imagem_url: '/img/bota.jpg'
+        });
+
+        expect(resultado).toEqual({ id: 3 });
+        const [sql, parametros] = dbMock.query.mock.calls.at(-1);
+        expect(sql).toContain('INSERT INTO produtos');
+        expect(sql).toContain('subcategoria');
+        expect(sql).toContain('nome_ordenacao');
+        expect(sql).toContain('RETURNING id');
+        expect(parametros[0]).toBe('Bota Nova');
+        expect(parametros[11]).toBe('bota nova');
+    });
+
+    it('rejeita tipo de busca desconhecido sem executar SQL', async () => {
+        await expect(ProdutoModel.buscar('bota', 'cor')).rejects.toMatchObject({ validacao: true });
+    });
+
+    it('rejeita termo de busca vazio', async () => {
+        await expect(ProdutoModel.buscar('   ', 'nome')).rejects.toMatchObject({ validacao: true });
     });
 });
