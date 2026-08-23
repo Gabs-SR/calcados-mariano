@@ -26,13 +26,16 @@ jobs:
                   cache: npm
                   cache-dependency-path: package-lock.json
 
-            # ALTERADO PARA npm install
             - run: npm install
 
             - name: Lint
               run: npm run lint
-            
-            # ... (mantenha o resto como está)
+
+            - name: Testes
+              run: npm test
+
+            - name: Formatação
+              run: npm run format:check
 
     frontend:
         name: Frontend (Node ${{ matrix.node }})
@@ -53,8 +56,13 @@ jobs:
                   cache: npm
                   cache-dependency-path: web/package-lock.json
 
-            # ALTERADO PARA npm install
             - run: npm install
 
             - name: Lint
               run: npm run lint
+
+            - name: Testes
+              run: npm test
+
+            - name: Build
+              run: npm run build
