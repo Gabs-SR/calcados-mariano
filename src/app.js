@@ -12,12 +12,23 @@ const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '100kb' }));
 
-// Em desenvolvimento o Vite usa proxy. Em produção, a API pode receber o front-end
-// hospedado em outro domínio; o CORS reflete a origem solicitada e permite o cookie
-// httpOnly usado pelo painel. As rotas de escrita continuam protegidas por sessão.
+const origensPermitidas = (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((origem) => origem.trim())
+    .filter(Boolean);
+
 app.use(
     cors({
-        origin: true,
+        origin(origem, callback) {
+            // Ferramentas sem Origin, como curl e Supertest, não precisam de CORS.
+            if (!origem) return callback(null, true);
+
+            // Sem lista configurada, o desenvolvimento permanece simples. Em produção,
+            // configure CORS_ORIGINS com os domínios reais da interface.
+            if (origensPermitidas.length === 0) return callback(null, true);
+
+            return callback(null, origensPermitidas.includes(origem));
+        },
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type']
