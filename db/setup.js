@@ -11,7 +11,6 @@ if (!process.env.DATABASE_URL) {
     process.exit(1);
 }
 
-const RAIZ = path.join(__dirname, '..');
 const ARQUIVO_ESQUEMA = path.join(__dirname, 'schema.sql');
 const ARQUIVO_INDICES = path.join(__dirname, 'indexes.sql');
 const ARQUIVO_CARGA = path.join(__dirname, 'seed.sql');
@@ -21,12 +20,6 @@ const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
-
-const chaveDeOrdenacao = (texto) =>
-    texto
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase();
 
 const executarArquivo = async (arquivo) => {
     const sql = fs.readFileSync(arquivo, 'utf8');
