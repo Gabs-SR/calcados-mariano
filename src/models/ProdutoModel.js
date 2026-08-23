@@ -211,8 +211,6 @@ const montarListagem = (filtros = {}) => {
 
 const idValido = (id) => /^[1-9][0-9]*$/.test(String(id));
 
-const escaparLike = (texto) => texto.replace(/[\\%_]/g, (caractere) => `\\${caractere}`);
-
 const ProdutoModel = {
     async listar(filtros = {}) {
         const consulta = montarListagem(filtros);
@@ -333,16 +331,13 @@ const ProdutoModel = {
         }
 
         const busca = TIPOS_DE_BUSCA[tipo];
-        const valor = busca.exata ? termo.trim() : `%${escaparLike(termo.trim())}%`;
+        const valor = busca.exata ? termo.trim() : `%${termo.trim()}%`;
         const operador = busca.exata ? '=' : 'ILIKE';
-        const escape = busca.exata ? '' : " ESCAPE '\\\\'";
 
-        const resultado = await db.buscarTodos(
-            `SELECT * FROM produtos WHERE ${busca.coluna} ${operador} $1${escape} ORDER BY nome_ordenacao ASC, id ASC`,
+        return db.buscarTodos(
+            `SELECT * FROM produtos WHERE ${busca.coluna} ${operador} $1 ORDER BY nome_ordenacao ASC, id ASC`,
             [valor]
         );
-
-        return resultado;
     },
 
     async listarTodos() {
