@@ -71,12 +71,18 @@ const garantirGeracaoDeId = async () => {
     const padrao = resultado.rows[0]?.column_default || '';
     if (padrao.includes('nextval(')) return;
 
+    await pool.query(`CREATE SEQUENCE IF NOT EXISTS produtos_id_seq`);
     await pool.query(`
-        CREATE SEQUENCE IF NOT EXISTS produtos_id_seq;
-        SELECT setval('produtos_id_seq', COALESCE((SELECT MAX(id) FROM produtos), 0));
-        ALTER SEQUENCE produtos_id_seq OWNED BY produtos.id;
-        ALTER TABLE produtos ALTER COLUMN id SET DEFAULT nextval('produtos_id_seq');
+        SELECT setval(
+            'produtos_id_seq',
+            GREATEST(COALESCE((SELECT MAX(id) FROM produtos), 0), 1),
+            EXISTS (SELECT 1 FROM produtos)
+        )
     `);
+    await pool.query('ALTER SEQUENCE produtos_id_seq OWNED BY produtos.id');
+    await pool.query(
+        'ALTER TABLE produtos ALTER COLUMN id SET DEFAULT nextval(\'produtos_id_seq\')'
+    );
 };
 
 const preencherOrdenacao = async () => {
