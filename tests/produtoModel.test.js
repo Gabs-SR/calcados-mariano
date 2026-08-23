@@ -1,15 +1,35 @@
 const { vi, describe, it, expect } = require('vitest');
 
-const PRODUTOS = [
-    { id: 1, nome: 'Bota Texana', numeracao: '41', categoria: 'Bota', publico: 'Masculino', quantidade: 8 },
-    { id: 2, nome: 'Chuteira Nike', numeracao: '39/40', categoria: 'Chuteira de futsal', publico: 'Unissex', quantidade: 15 }
-];
+const { produtos, dbMock } = vi.hoisted(() => {
+    const produtos = [
+        {
+            id: 1,
+            nome: 'Bota Texana',
+            numeracao: '41',
+            categoria: 'Bota',
+            publico: 'Masculino',
+            quantidade: 8
+        },
+        {
+            id: 2,
+            nome: 'Chuteira Nike',
+            numeracao: '39/40',
+            categoria: 'Chuteira de futsal',
+            publico: 'Unissex',
+            quantidade: 15
+        }
+    ];
 
-const dbMock = vi.hoisted(() => ({
-    query: vi.fn(async () => ({ rows: [{ id: 3 }] })),
-    buscarUm: vi.fn(async (sql) => (sql.includes('COUNT(*)') ? { total: PRODUTOS.length } : PRODUTOS[0])),
-    buscarTodos: vi.fn(async () => PRODUTOS)
-}));
+    const dbMock = {
+        query: vi.fn(async () => ({ rows: [{ id: 3 }] })),
+        buscarUm: vi.fn(async (sql) =>
+            sql.includes('COUNT(*)') ? { total: produtos.length } : produtos[0]
+        ),
+        buscarTodos: vi.fn(async () => produtos)
+    };
+
+    return { produtos, dbMock };
+});
 
 vi.mock('../src/config/db', () => dbMock);
 
@@ -20,7 +40,7 @@ describe('ProdutoModel PostgreSQL', () => {
         const resultado = await ProdutoModel.listar({ pagina: '1', limite: '10' });
 
         expect(resultado).toEqual({
-            produtos: PRODUTOS,
+            produtos,
             total: 2,
             pagina: 1,
             limite: 10,
