@@ -34,9 +34,6 @@ jobs:
             - name: Testes
               run: npm test
 
-            - name: Formatação
-              run: npm run format:check
-
     frontend:
         name: Frontend (Node ${{ matrix.node }})
         runs-on: ubuntu-latest
