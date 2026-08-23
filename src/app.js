@@ -1,43 +1,51 @@
 require('./config/ambiente').carregarAmbiente();
 
-const express = require('express'); // Importe o express
-const path = require('path');
-const sqlite3 = require('sqlite3').verbose();
+const express = require('express');
+const cors = require('cors');
 
-const app = express(); // Crie a instância do app Express
-app.use(express.json()); // Importante para rotas funcionarem
+const produtoRoutes = require('./routes/produtoRoutes');
+const healthRoutes = require('./routes/healthRoutes');
+const authRoutes = require('./routes/authRoutes');
 
-const CAMINHO_PADRAO = path.resolve(__dirname, '../../database.sqlite');
-const caminhoDb = process.env.DB_PATH || CAMINHO_PADRAO;
+const app = express();
 
-const db = new sqlite3.Database(caminhoDb, (erro) => {
-    if (erro) {
-        console.error('Erro ao conectar no SQLite:', erro.message);
-    } else {
-        console.log('Conectado ao banco de dados SQLite com sucesso!');
+app.disable('x-powered-by');
+app.use(express.json({ limit: '100kb' }));
+
+// Em desenvolvimento o Vite usa proxy. Em produção, a API pode receber o front-end
+// hospedado em outro domínio; o CORS reflete a origem solicitada e permite o cookie
+// httpOnly usado pelo painel. As rotas de escrita continuam protegidas por sessão.
+app.use(
+    cors({
+        origin: true,
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type']
+    })
+);
+
+app.get('/', (req, res) => {
+    res.type('text').send('Calçados Mariano API');
+});
+
+app.use(healthRoutes);
+app.use(authRoutes);
+app.use(produtoRoutes);
+
+app.use((req, res) => {
+    res.status(404).json({ mensagem: 'Rota não encontrada.' });
+});
+
+app.use((erro, req, res, next) => {
+    if (res.headersSent) return next(erro);
+
+    console.error('Erro não tratado na API:', erro);
+
+    if (erro.type === 'entity.parse.failed') {
+        return res.status(400).json({ mensagem: 'O corpo da requisição precisa ser um JSON válido.' });
     }
+
+    return res.status(500).json({ mensagem: 'Erro interno do servidor.' });
 });
 
-db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS produtos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL,
-        preco REAL NOT NULL,
-        tamanhos TEXT NOT NULL,
-        categoria TEXT NOT NULL,
-        imagem TEXT,
-        destaque INTEGER DEFAULT 0,
-        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
-    );`);
-
-    db.run(`CREATE TABLE IF NOT EXISTS sessoes (
-        id TEXT PRIMARY KEY,
-        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
-    );`);
-});
-
-// Adicione o banco à instância do express para usar nas rotas
-app.db = db;
-
-// EXPORTE O APP (que agora é a instância do Express)
 module.exports = app;
